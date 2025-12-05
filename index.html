@@ -24,4 +24,251 @@
     <label>Número de gestión (5 dígitos)</label>
     <input type="text" id="gestion" required>
 
-    <label>Fecha (dd/mm/aaaa)</lab
+    <label>Fecha (dd/mm/aaaa)</label>
+    <input type="text" id="fecha" placeholder="dd/mm/aaaa" required>
+
+    <label>Nombre y Apellido</label>
+    <input type="text" id="nombre" required>
+
+    <label>DNI (8 dígitos)</label>
+    <input type="text" id="dni" required>
+
+    <label>Tipo</label>
+    <select id="tipo">
+        <option value="Caso Nuevo">Caso Nuevo</option>
+        <option value="Seguimiento">Seguimiento</option>
+    </select>
+
+    <label>Ámbito(s) de intervención</label>
+    <div class="checkbox-group">
+        <label><input type="checkbox" class="ambito" value="Legal"> Legal</label>
+        <label><input type="checkbox" class="ambito" value="Psicológico"> Psicológico</label>
+        <label><input type="checkbox" class="ambito" value="Social"> Social</label>
+        <label><input type="checkbox" class="ambito" value="Post-hospitalario"> Post-hospitalario</label>
+    </div>
+
+    <button type="button" onclick="agregarRegistro()">Guardar</button>
+</form>
+
+<table id="tabla">
+    <thead>
+        <tr>
+            <th>Gestión</th>
+            <th>Fecha</th>
+            <th>Nombre</th>
+            <th>DNI</th>
+            <th>Tipo</th>
+            <th>Ámbitos</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<h3>Estadísticas por rango de fechas (solo esta sesión)</h3>
+
+<label>Desde (dd/mm/aaaa)</label>
+<input type="text" id="fechaDesde" placeholder="dd/mm/aaaa">
+
+<label>Hasta (dd/mm/aaaa)</label>
+<input type="text" id="fechaHasta" placeholder="dd/mm/aaaa">
+
+<button type="button" onclick="calcularEstadisticas()">Calcular estadísticas</button>
+
+<div id="resultadoStats"></div>
+
+<script>
+// URL del Web App de Google Apps Script (la tuya, que ya guarda bien)
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw9f3EXGNfXMDUvxuNtevcNCl23QURpBCRAu8hVfw42SZxB8HBrQLMJSGrWOJ4OcbRJaA/exec";
+
+// Array para guardar los registros en memoria (para la tabla y estadísticas de ESTA sesión)
+const registros = [];
+
+// -------- Máscaras y validaciones --------
+
+// Mascara de fecha dd/mm/aaaa con barras automáticas
+function configurarMascaraFecha(id) {
+    const input = document.getElementById(id);
+    input.setAttribute('maxlength', '10');
+
+    input.addEventListener('input', function () {
+        // Solo números
+        let v = this.value.replace(/[^\d]/g, '');
+        if (v.length > 8) v = v.slice(0, 8);
+
+        if (v.length >= 5) {
+            this.value = v.slice(0, 2) + '/' + v.slice(2, 4) + '/' + v.slice(4);
+        } else if (v.length >= 3) {
+            this.value = v.slice(0, 2) + '/' + v.slice(2);
+        } else {
+            this.value = v;
+        }
+    });
+}
+
+// Campo numérico con longitud máxima
+function configurarCampoNumerico(id, maxLen) {
+    const input = document.getElementById(id);
+    input.setAttribute('maxlength', String(maxLen));
+
+    input.addEventListener('input', function () {
+        this.value = this.value.replace(/\D/g, '').slice(0, maxLen);
+    });
+}
+
+// Obtener ámbitos seleccionados
+function obtenerAmbitosSeleccionados() {
+    const checks = document.querySelectorAll('.ambito:checked');
+    const valores = Array.from(checks).map(c => c.value);
+    return valores;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    configurarMascaraFecha('fecha');
+    configurarMascaraFecha('fechaDesde');
+    configurarMascaraFecha('fechaHasta');
+
+    configurarCampoNumerico('gestion', 5);
+    configurarCampoNumerico('dni', 8);
+});
+
+// -------- Lógica principal --------
+
+function agregarRegistro() {
+    const gestion = document.getElementById("gestion").value.trim();
+    const fecha = document.getElementById("fecha").value.trim();
+    const nombre = document.getElementById("nombre").value.trim();
+    const dni = document.getElementById("dni").value.trim();
+    const tipo = document.getElementById("tipo").value;
+    const ambitos = obtenerAmbitosSeleccionados();
+
+    if (!gestion || !fecha || !nombre || !dni) {
+        alert("Por favor completá todos los campos obligatorios.");
+        return;
+    }
+
+    if (gestion.length !== 5) {
+        alert("El número de gestión debe tener exactamente 5 dígitos.");
+        return;
+    }
+
+    if (dni.length !== 8) {
+        alert("El DNI debe tener exactamente 8 dígitos.");
+        return;
+    }
+
+    if (!parseFecha(fecha)) {
+        alert("La fecha de la gestión no es válida. Usá el formato dd/mm/aaaa.");
+        return;
+    }
+
+    // 1) Agregar fila a la tabla (vista local)
+    const tabla = document
+        .getElementById("tabla")
+        .getElementsByTagName("tbody")[0];
+
+    const fila = tabla.insertRow();
+
+    fila.insertCell(0).innerText = gestion;
+    fila.insertCell(1).innerText = fecha;
+    fila.insertCell(2).innerText = nombre;
+    fila.insertCell(3).innerText = dni;
+    fila.insertCell(4).innerText = tipo;
+    fila.insertCell(5).innerText = ambitos.join(", ");
+
+    // 2) Guardar registro en el arreglo local (para estadísticas)
+    const registro = { gestion, fecha, nombre, dni, tipo, ambitos };
+    registros.push(registro);
+
+    // 3) Enviar registro a Google Sheets (base de datos)
+    enviarAGoogleSheets(registro);
+
+    // 4) Limpiar formulario
+    document.getElementById("formulario").reset();
+}
+
+// Enviar datos al Web App de Google Apps Script
+function enviarAGoogleSheets(registro) {
+    console.log("Enviando registro a Google Sheets:", registro);
+    fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors', // no esperamos respuesta detallada
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(registro)
+    }).catch(err => {
+        console.error('Error al enviar a Google Sheets:', err);
+        alert("Hubo un problema enviando los datos a la hoja. Revisá la consola.");
+    });
+}
+
+// Parsear fecha dd/mm/aaaa a objeto Date
+function parseFecha(cadena) {
+    if (!cadena) return null;
+    const partes = cadena.split("/");
+    if (partes.length !== 3) return null;
+
+    const dia = parseInt(partes[0], 10);
+    const mes = parseInt(partes[1], 10) - 1; // Mes empieza en 0
+    const anio = parseInt(partes[2], 10);
+
+    if (isNaN(dia) || isNaN(mes) || isNaN(anio)) return null;
+
+    const fecha = new Date(anio, mes, dia);
+    if (isNaN(fecha.getTime())) return null;
+
+    // Chequeo simple de coherencia
+    if (fecha.getDate() !== dia || fecha.getMonth() !== mes || fecha.getFullYear() !== anio) {
+        return null;
+    }
+
+    return fecha;
+}
+
+// Estadísticas usando SOLO los registros de esta sesión
+function calcularEstadisticas() {
+    const desdeStr = document.getElementById("fechaDesde").value.trim();
+    const hastaStr = document.getElementById("fechaHasta").value.trim();
+
+    const desde = parseFecha(desdeStr);
+    const hasta = parseFecha(hastaStr);
+
+    if (!desde || !hasta) {
+        alert("Revisá el formato de las fechas (deben ser dd/mm/aaaa).");
+        return;
+    }
+
+    // comienzo y fin del día
+    desde.setHours(0, 0, 0, 0);
+    hasta.setHours(23, 59, 59, 999);
+
+    let total = 0;
+    let casoNuevo = 0;
+    let seguimiento = 0;
+
+    registros.forEach(reg => {
+        const fechaReg = parseFecha(reg.fecha);
+        if (!fechaReg) return;
+
+        if (fechaReg >= desde && fechaReg <= hasta) {
+            total++;
+            if (reg.tipo === "Caso Nuevo") casoNuevo++;
+            if (reg.tipo === "Seguimiento") seguimiento++;
+        }
+    });
+
+    const resultadoDiv = document.getElementById("resultadoStats");
+
+    resultadoDiv.innerHTML = `
+        <p><strong>Resultados entre ${desdeStr} y ${hastaStr}</strong></p>
+        <ul>
+            <li>Total de registros (esta sesión): ${total}</li>
+            <li>Caso Nuevo: ${casoNuevo}</li>
+            <li>Seguimiento: ${seguimiento}</li>
+        </ul>
+    `;
+}
+</script>
+
+</body>
+</html>
