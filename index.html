@@ -1,89 +1,9 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Registro de Gestiones</title>
-<style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; }
-    label { font-weight: bold; display: block; margin-top: 10px; }
-    input, select { width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box; }
-    .checkbox-group { margin-top: 5px; }
-    .checkbox-group label { font-weight: normal; display: inline-block; margin-right: 15px; }
-    button { margin-top: 15px; padding: 10px; font-size: 16px; cursor: pointer; }
-    table { width: 100%; margin-top: 20px; border-collapse: collapse; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    h2, h3 { margin-top: 25px; }
-    #resultadoStats ul { margin: 5px 0 0 20px; }
-</style>
-</head>
-<body>
-
-<h2>Registro de Gestiones</h2>
-
-<form id="formulario">
-    <label>Número de gestión (5 dígitos)</label>
-    <input type="text" id="gestion" required>
-
-    <label>Fecha (dd/mm/aaaa)</label>
-    <input type="text" id="fecha" placeholder="dd/mm/aaaa" required>
-
-    <label>Nombre y Apellido</label>
-    <input type="text" id="nombre" required>
-
-    <label>DNI (8 dígitos)</label>
-    <input type="text" id="dni" required>
-
-    <label>Tipo</label>
-    <select id="tipo">
-        <option value="Caso Nuevo">Caso Nuevo</option>
-        <option value="Seguimiento">Seguimiento</option>
-    </select>
-
-    <label>Ámbito(s) de intervención</label>
-    <div class="checkbox-group">
-        <label><input type="checkbox" class="ambito" value="Legal"> Legal</label>
-        <label><input type="checkbox" class="ambito" value="Psicológico"> Psicológico</label>
-        <label><input type="checkbox" class="ambito" value="Social"> Social</label>
-        <label><input type="checkbox" class="ambito" value="Post-hospitalario"> Post-hospitalario</label>
-    </div>
-
-    <button type="button" onclick="agregarRegistro()">Guardar</button>
-</form>
-
-<table id="tabla">
-    <thead>
-        <tr>
-            <th>Gestión</th>
-            <th>Fecha</th>
-            <th>Nombre</th>
-            <th>DNI</th>
-            <th>Tipo</th>
-            <th>Ámbitos</th>
-        </tr>
-    </thead>
-    <tbody></tbody>
-</table>
-
-<h3>Estadísticas por rango de fechas (solo esta sesión)</h3>
-
-<label>Desde (dd/mm/aaaa)</label>
-<input type="text" id="fechaDesde" placeholder="dd/mm/aaaa">
-
-<label>Hasta (dd/mm/aaaa)</label>
-<input type="text" id="fechaHasta" placeholder="dd/mm/aaaa">
-
-<button type="button" onclick="calcularEstadisticas()">Calcular estadísticas</button>
-
-<div id="resultadoStats"></div>
-
 <script>
-// URL del Web App de Google Apps Script (la tuya, que ya guarda bien)
+// URL del Web App de Google Apps Script
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw9f3EXGNfXMDUvxuNtevcNCl23QURpBCRAu8hVfw42SZxB8HBrQLMJSGrWOJ4OcbRJaA/exec";
 
-// Array para guardar los registros en memoria (para la tabla y estadísticas de ESTA sesión)
+// Array para guardar los registros en memoria (para la tabla y estadísticas locales)
 const registros = [];
-
-// -------- Máscaras y validaciones --------
 
 // Mascara de fecha dd/mm/aaaa con barras automáticas
 function configurarMascaraFecha(id) {
@@ -111,6 +31,7 @@ function configurarCampoNumerico(id, maxLen) {
     input.setAttribute('maxlength', String(maxLen));
 
     input.addEventListener('input', function () {
+        // Solo números y tope de longitud
         this.value = this.value.replace(/\D/g, '').slice(0, maxLen);
     });
 }
@@ -122,6 +43,34 @@ function obtenerAmbitosSeleccionados() {
     return valores;
 }
 
+// Cargar registros desde Google Sheets al iniciar
+function cargarRegistrosDesdeServidor() {
+    fetch(SCRIPT_URL)
+        .then(res => res.json())
+        .then(data => {
+            // data es un array de objetos con: gestion, fecha, nombre, dni, tipo, ambitos
+            const tabla = document
+                .getElementById("tabla")
+                .getElementsByTagName("tbody")[0];
+
+            data.forEach(reg => {
+                registros.push(reg);
+
+                const fila = tabla.insertRow();
+                fila.insertCell(0).innerText = reg.gestion;
+                fila.insertCell(1).innerText = reg.fecha;
+                fila.insertCell(2).innerText = reg.nombre;
+                fila.insertCell(3).innerText = reg.dni;
+                fila.insertCell(4).innerText = reg.tipo;
+                const amb = Array.isArray(reg.ambitos) ? reg.ambitos.join(", ") : reg.ambitos;
+                fila.insertCell(5).innerText = amb || "";
+            });
+        })
+        .catch(err => {
+            console.error("Error cargando registros desde el servidor:", err);
+        });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     configurarMascaraFecha('fecha');
     configurarMascaraFecha('fechaDesde');
@@ -129,9 +78,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     configurarCampoNumerico('gestion', 5);
     configurarCampoNumerico('dni', 8);
-});
 
-// -------- Lógica principal --------
+    // NUEVO: al cargar la página, traemos lo que ya estaba en la planilla
+    cargarRegistrosDesdeServidor();
+});
 
 function agregarRegistro() {
     const gestion = document.getElementById("gestion").value.trim();
@@ -161,7 +111,7 @@ function agregarRegistro() {
         return;
     }
 
-    // 1) Agregar fila a la tabla (vista local)
+    // Agregar fila a la tabla (vista local)
     const tabla = document
         .getElementById("tabla")
         .getElementsByTagName("tbody")[0];
@@ -175,14 +125,14 @@ function agregarRegistro() {
     fila.insertCell(4).innerText = tipo;
     fila.insertCell(5).innerText = ambitos.join(", ");
 
-    // 2) Guardar registro en el arreglo local (para estadísticas)
+    // Guardar registro en el arreglo local (para estadísticas)
     const registro = { gestion, fecha, nombre, dni, tipo, ambitos };
     registros.push(registro);
 
-    // 3) Enviar registro a Google Sheets (base de datos)
+    // Enviar registro a Google Sheets
     enviarAGoogleSheets(registro);
 
-    // 4) Limpiar formulario
+    // Limpiar formulario
     document.getElementById("formulario").reset();
 }
 
@@ -191,7 +141,7 @@ function enviarAGoogleSheets(registro) {
     console.log("Enviando registro a Google Sheets:", registro);
     fetch(SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors', // no esperamos respuesta detallada
+        mode: 'no-cors', // enviamos sin esperar respuesta
         headers: {
             'Content-Type': 'application/json'
         },
@@ -225,7 +175,6 @@ function parseFecha(cadena) {
     return fecha;
 }
 
-// Estadísticas usando SOLO los registros de esta sesión
 function calcularEstadisticas() {
     const desdeStr = document.getElementById("fechaDesde").value.trim();
     const hastaStr = document.getElementById("fechaHasta").value.trim();
@@ -238,7 +187,7 @@ function calcularEstadisticas() {
         return;
     }
 
-    // comienzo y fin del día
+    // Normalizar rangos (comienzo y fin del día)
     desde.setHours(0, 0, 0, 0);
     hasta.setHours(23, 59, 59, 999);
 
@@ -262,13 +211,10 @@ function calcularEstadisticas() {
     resultadoDiv.innerHTML = `
         <p><strong>Resultados entre ${desdeStr} y ${hastaStr}</strong></p>
         <ul>
-            <li>Total de registros (esta sesión): ${total}</li>
+            <li>Total de registros: ${total}</li>
             <li>Caso Nuevo: ${casoNuevo}</li>
             <li>Seguimiento: ${seguimiento}</li>
         </ul>
     `;
 }
 </script>
-
-</body>
-</html>
