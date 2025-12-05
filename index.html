@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Registro de Gestiones</title>
+<style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; }
+    label { font-weight: bold; display: block; margin-top: 10px; }
+    input, select { width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box; }
+    .checkbox-group { margin-top: 5px; }
+    .checkbox-group label { font-weight: normal; display: inline-block; margin-right: 15px; }
+    button { margin-top: 15px; padding: 10px; font-size: 16px; cursor: pointer; }
+    table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    h2, h3 { margin-top: 25px; }
+    #resultadoStats ul { margin: 5px 0 0 20px; }
+</style>
+</head>
+<body>
+
+<h2>Registro de Gestiones</h2>
+
+<form id="formulario">
+    <label>Número de gestión (5 dígitos)</label>
+    <input type="text" id="gestion" required>
+
+    <label>Fecha (dd/mm/aaaa)</label>
+    <input type="text" id="fecha" placeholder="dd/mm/aaaa" required>
+
+    <label>Nombre y Apellido</label>
+    <input type="text" id="nombre" required>
+
+    <label>DNI (8 dígitos)</label>
+    <input type="text" id="dni" required>
+
+    <label>Tipo</label>
+    <select id="tipo">
+        <option value="Caso Nuevo">Caso Nuevo</option>
+        <option value="Seguimiento">Seguimiento</option>
+    </select>
+
+    <label>Ámbito(s) de intervención</label>
+    <div class="checkbox-group">
+        <label><input type="checkbox" class="ambito" value="Legal"> Legal</label>
+        <label><input type="checkbox" class="ambito" value="Psicológico"> Psicológico</label>
+        <label><input type="checkbox" class="ambito" value="Social"> Social</label>
+        <label><input type="checkbox" class="ambito" value="Post-hospitalario"> Post-hospitalario</label>
+    </div>
+
+    <button type="button" onclick="agregarRegistro()">Guardar</button>
+</form>
+
+<table id="tabla">
+    <thead>
+        <tr>
+            <th>Gestión</th>
+            <th>Fecha</th>
+            <th>Nombre</th>
+            <th>DNI</th>
+            <th>Tipo</th>
+            <th>Ámbitos</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<h3>Estadísticas por rango de fechas</h3>
+
+<label>Desde (dd/mm/aaaa)</label>
+<input type="text" id="fechaDesde" placeholder="dd/mm/aaaa">
+
+<label>Hasta (dd/mm/aaaa)</label>
+<input type="text" id="fechaHasta" placeholder="dd/mm/aaaa">
+
+<button type="button" onclick="calcularEstadisticas()">Calcular estadísticas</button>
+
+<div id="resultadoStats"></div>
+
+<script>
+// URL del Web App de Google Apps Script
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw9f3EXGNfXMDUvxuNtevcNCl23QURpBCRAu8hVfw42SZxB8HBrQLMJSGrWOJ4OcbRJaA/exec";
+
+// Array para guardar los registros en memoria (para la tabla y estadísticas locales)
+const registros = [];
+
+// Mascara de fecha dd/mm/aaaa con barras automáticas
+function configurarMascaraFecha(id) {
+    const input = document.getElementById(id);
+    input.setAttribute('maxlength', '10');
+
+    input.addEventListener('input', function () {
+        // Solo números
+        let v = this.value.replace(/[^\d]/g, '');
+        if (v.length > 8) v = v.slice(0, 8);
+
+        if (v.length >= 5) {
+            this.value = v.slice(0, 2) + '/' + v.slice(2, 4) + '/' + v.slice(4);
+        } else if (v.length
